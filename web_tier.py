@@ -1,7 +1,9 @@
 __author__ = 'a.medvedev'
 
+import re
 import json
 import logging
+import utils
 import tornado.web
 import tornado.ioloop
 import tornado.httputil
@@ -66,21 +68,82 @@ class RegnH(tornado.web.RequestHandler):
     }
     """
 
+    def __init__(self, application, request, **kwargs):
+        super().__init__(application, request, **kwargs)
+        self.is_valid = True
+        self.login = None
+        self.password = None
+        self.name = None
+        self.data = None
+        self.error_m = None
+
     @asynchronous
     def post(self):
         if self.request.body is not None:
             try:
                 in_body = json.loads(self.request.body.decode('utf-8'))
                 self.parse_body(in_body)
+                if not self.is_valid:
+                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
+                else:
+                    #TODO Отправка аргументов + self в task_queue на исполнение
+                    return
             except Exception as e:
-                logging.warning('Exception on web_tier.RegnH : post :: {}'.format(e))
+                logging.warning('Exception on web_tier.RegnH : post - {}'.format(e))
                 self.set_status(400)
         else:
             self.set_status(400)
         self.finish()
 
     def parse_body(self, b):
-        pass
+        if 'login' in b:
+            self.login = b['login']
+            if len(self.login) < 4 or len(self.login) > 30:
+                self.is_valid = False
+                self.error_m = 'Invalid login length : must be [4, 30]'
+                return
+            if not re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$', self.login):
+                self.is_valid = False
+                self.error_m = 'Invalid login form: must be an email'
+                return
+        else:
+            self.is_valid = False
+            self.error_m = 'Invalid arguments: no login'
+            return
+
+        if 'password' in b:
+            self.password = b['password']
+            if len(self.password) < 6 or len(self.password) > 50:
+                self.is_valid = False
+                self.error_m = 'Invalid password length : must be [6, 50]'
+                return
+        else:
+            self.is_valid = False
+            self.error_m = 'Invalid arguments: no password'
+            return
+
+        if 'name' in b:
+            self.name = b['name']
+            if not utils.chlat_dot_etc(self.name):
+                self.is_valid = False
+                self.error_m = 'Invalid argument: name must be lat || dot'
+                return
+        else:
+            self.is_valid = False
+            self.error_m = 'Invalid arguments: no password'
+            return
+
+        if 'data' in b:
+            self.data = []
+            for k in b['data']:
+                if b['data'][k] is str:
+                    self.data.append((k, b['data'][k]))
+                elif b['data'][k] is int or b['data'][k] is float or b['data'][k] is bool:
+                    self.data.append((k, str(b['data'][k])))
+                else:
+                    self.is_valid = False
+                    self.error_m = 'Data format is invalid'
+                    return
 
 
 class LoginH(tornado.web.RequestHandler):
@@ -103,11 +166,53 @@ class LoginH(tornado.web.RequestHandler):
         "m": "Invalid login or password"
     }
     """
+    def __init__(self, application, request, **kwargs):
+        super().__init__(application, request, **kwargs)
+        self.is_valid = True
+        self.login = None
+        self.password = None
+        self.error_m = None
 
     @asynchronous
     def post(self):
-        self.set_status(501)
+        if self.request.body is not None:
+            try:
+                in_body = json.loads(self.request.body.decode('utf-8'))
+                self.parse_body(in_body)
+                if not self.is_valid:
+                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
+                else:
+                    #TODO Отправка аргументов + self в task_queue на исполнение
+                    return
+            except Exception as e:
+                logging.warning('Exception on web_tier.LoginH : post - {}'.format(e))
+                self.set_status(400)
+        else:
+            self.set_status(400)
         self.finish()
+
+    def parse_body(self, b):
+        if 'login' in b:
+            self.login = b['login']
+            if len(self.login) < 4 or len(self.login) > 30:
+                self.is_valid = False
+                self.error_m = 'Invalid login length : must be [4, 30]'
+                return
+        else:
+            self.is_valid = False
+            self.error_m = 'Invalid arguments: no login'
+            return
+
+        if 'password' in b:
+            self.password = b['password']
+            if len(self.password) < 6 or len(self.password) > 50:
+                self.is_valid = False
+                self.error_m = 'Invalid password length : must be [6, 50]'
+                return
+        else:
+            self.is_valid = False
+            self.error_m = 'Invalid arguments: no password'
+            return
 
 
 class LogoutH(tornado.web.RequestHandler):

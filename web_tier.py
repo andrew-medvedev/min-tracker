@@ -1,5 +1,7 @@
 __author__ = 'a.medvedev'
 
+import json
+import logging
 import tornado.web
 import tornado.ioloop
 import tornado.httputil
@@ -27,7 +29,11 @@ def init_web_tier(host, port):
         (r'/api/tasks/edit', TasksEditH),
         (r'/api/tasks/edit_s', TasksEditSH),
     ])
-    app.listen(port, host)
+    try:
+        app.listen(port, host)
+    except Exception as e:
+        logging.critical('At web_tier.init_web_tier :: {}'.format(e))
+        return
     tornado.ioloop.IOLoop.instance().start()
 
 
@@ -44,9 +50,9 @@ class RegnH(tornado.web.RequestHandler):
         "password": "123",
         "name": "v.pupkin",
         "data":{
-        "fname": "vasiliy",
-        "lname": "pupkin",
-        "role": "Python Developer"
+            "fname": "vasiliy",
+            "lname": "pupkin",
+            "role": "Python Developer"
         }
     }
 
@@ -62,8 +68,19 @@ class RegnH(tornado.web.RequestHandler):
 
     @asynchronous
     def post(self):
-        self.set_status(501)
+        if self.request.body is not None:
+            try:
+                in_body = json.loads(self.request.body.decode('utf-8'))
+                self.parse_body(in_body)
+            except Exception as e:
+                logging.warning('Exception on web_tier.RegnH : post :: {}'.format(e))
+                self.set_status(400)
+        else:
+            self.set_status(400)
         self.finish()
+
+    def parse_body(self, b):
+        pass
 
 
 class LoginH(tornado.web.RequestHandler):

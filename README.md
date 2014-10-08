@@ -1,4 +1,4 @@
-Min Tracker
+Mini Tracker
 ================
 
 ### V ###

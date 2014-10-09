@@ -898,7 +898,7 @@ class ProjectsEditH(DefaultHandler):
         }
         "s": "closed"
     }
-
+/
     Положительный ответ: {
         "ans": "ok"
     }

@@ -7,7 +7,7 @@
 """
 
 __author__ = 'a.medvedev'
-__version__ = '0.1_2'
+__version__ = '0.2'
 
 import web_tier
 import sys
@@ -15,6 +15,10 @@ import logging
 
 
 def main():
+    """
+    Точка входа для программы. Парсит аргументы запуска, настраивает logging и инстанциирует веб сервер
+
+    """
     args = parse_arguments()
     if args is None:
         logging.basicConfig(format='%(levelname)s : %(asctime)s : %(message)s', datefmt='%m/%d/%Y %H:%M:%S', level=logging.WARN)

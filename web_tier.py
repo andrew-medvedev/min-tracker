@@ -1,25 +1,16 @@
 __author__ = 'a.medvedev'
 
 import re
+import abc
 import json
 import logging
 import utils
+import limits
 import tornado.web
 import tornado.ioloop
 import tornado.httputil
 from tornado.web import asynchronous
 
-LOGIN_MIN_LEN, LOGIN_MAX_LEN = 4, 30
-PASSWORD_MIN_LEN, PASSWORD_MAX_LEN = 6, 50
-NAME_MIN_LEN, NAME_MAX_LEN = 4, 30
-ID_MIN_LEN, ID_MAX_LEN = 1, 19
-ROLE_MIN_LEN, ROLE_MAX_LEN = 3, 4
-STATUS_MIN_LEN, STATUS_MAX_LEN = 5, 10
-VARCHAR_MAX_LEN = 255
-TOKEN_LEN = 50
-
-# TODO Ввести проверку по типам Json-тел
-# TODO Ввести потом реальную длину токена в TOKEN_LEN
 
 def init_web_tier(host, port):
     app = tornado.web.Application([
@@ -45,12 +36,199 @@ def init_web_tier(host, port):
     try:
         app.listen(port, host)
     except Exception as e:
-        logging.critical('At web_tier.init_web_tier :: {}'.format(e))
+        logging.critical('At web_tier.init_web_tier - {}'.format(e))
         return
     tornado.ioloop.IOLoop.instance().start()
 
 
-class RegnH(tornado.web.RequestHandler):
+class DefaultHandler(tornado.web.RequestHandler):
+    """
+    Абстрактный(по идее) класс, который будет являться основой для всех веб-слушателей,
+    содержит в себе внутренние методы парсинга аргументов из dict-тела, шаблонные get- и post- обработчики
+    """
+    def __init__(self, application, request, **kwargs):
+        super().__init__(application, request, **kwargs)
+        self.is_valid = True
+        self.error_m = None
+
+    def _post_pat(self):
+        if self.request.body is not None:
+            # try:
+                in_body = json.loads(self.request.body.decode('utf-8'))
+                self._parse_body(in_body)
+                if not self.is_valid:
+                    self.write(json.dumps({
+                        "ans": "nok",
+                        "m": self.error_m
+                    }))
+                else:
+                    self._process_req()
+                    return
+            # except Exception as e:
+            #     logging.warning('Exception on {} : post - {}'.format(self.__class__.__name__, e.args))
+            #     self.set_status(400)
+        else:
+            self.set_status(400)
+        self.finish()
+
+    @abc.abstractmethod
+    def _parse_body(self, b):
+        """
+        Абстрактный(по идее) метод, который будет содержать в себе логику извлечения аргументов из тела запроса
+
+        :param b: dict-тело post-запроса
+        """
+        pass
+
+    def _process_req(self):
+        """
+        Метод, который отправляет запрос со всеми аргументами на исполнение(в очередь задач)
+        По умолчанию - просто возвращает такой вот ответ:
+        """
+        self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+        self.finish()
+
+    def _parse_str(self, b, k, min_len, max_len, spec_check=None):
+        """
+        Внутренний метод парсит строку из dict-тела b под ключем k. Если в процессе извлечения аргумента произошла
+        какая-то ошибка, метод вернет None, и присвоит соответствующие значения self-переменным is_valid и error_m
+
+        :param b: dict-тело, полученной в результате парсинга json-тела, сформированного клиентом
+        :param k: str-значение ключа, под которым нужно искать нужный аргумент в теле b
+        :param min_len: проверка на минимальное значение длины str-аргумента, если оный будет извлечен из тела
+        :param max_len: проверка на максимальное значение длины str-аргумента, если оный будет извлечен из тела
+        :param spec_check: лямбда для специальной проверки извлеченного значение. Функция должна возвращать str-значение
+        ошибки, или None, если извлеченный аргумент прошел проверку
+        :return: извлеченный из тела аргумент, или None, если есть проблемы
+        """
+        out = None
+
+        if k in b:
+            if type(b[k]) is str:
+                out = True, b[k]
+                if len(b[k]) < min_len or len(b[k]) > max_len:
+                    out = False, 'Invalid {} length : must be [{}, {}]'.format(k, min_len, max_len)
+                elif spec_check is not None:
+                    err_m = spec_check(b[k])
+                    if err_m is not None:
+                        out = False, err_m
+            else:
+                out = False, 'Invalid argument type: {} must be str'.format(k)
+        else:
+            out = False, 'Invalid arguments: no {}'.format(k)
+
+        return out
+
+    def _parse_int(self, b, k, min_val, max_val, spec_check=None):
+        """
+        Внутренний метод парсит целое число из dict-тела b под ключем k. Если в процессе извлечения аргумента произошла
+        какая-то ошибка, метод вернет None, и присвоит соответствующие значения self-переменным is_valid и error_m
+
+        :param b: dict-тело, полученной в результате парсинга json-тела, сформированного клиентом
+        :param k: str-значение ключа, под которым нужно искать нужный аргумент в теле b
+        :param min_val: проверка на минимальное значение int-аргумента, если оный будет извлечен из тела
+        :param max_val: проверка на максимальное значение int-аргумента, если оный будет извлечен из тела
+        :param spec_check: лямбда для специальной проверки извлеченного значение. Функция должна возвращать str-значение
+        ошибки, или None, если извлеченный аргумент прошел проверку
+        :return: извлеченный из тела аргумент, или None, если есть проблемы
+        """
+        out = None
+
+        if k in b:
+            if type(b[k]) is int:
+                out = True, b[k]
+                if b[k] < min_val or b[k] > max_val:
+                    out = False, 'Invalid {} range : must be [{}, {}]'.format(k, min_val, max_val)
+                elif spec_check is not None:
+                    err_m = spec_check(b[k])
+                    if err_m is not None:
+                        out = False, err_m
+            else:
+                out = False, 'Invalid argument type: {} must be integer'.format(k)
+        else:
+            out = False, 'Invalid arguments: no {}'.format(k)
+
+        return out
+
+    def _parse_kv_dict(self, b, k, **kwargs):
+        """
+        Внутренний метод парсит key-value словарь из dict-тела b под ключем k. Если в процессе извлечения произошла
+        какая-то ошибка, метод вернет None, и присвоит соответствующие значения self-переменным is_valid и error_m.
+        Весьма тупой алгоритм, но пока это - оптимальное решение
+
+        :param b: dict-тело, полученной в результате парсинга json-тела, сформированного клиентом
+        :param k1: str-значение ключа, под которым нужно искать нужный аргумент в теле b
+        :param kwargs: хитрая система ниппель(filter - dict для сопоставления имен полей и типов, exclude - флаг,
+        который исключает остальный поля, не входящие в filter, all_type - тип, которому должны пренадлежать все поля,
+        all_need - флаг, указывающий, что все поля, указанные в фильтре, должны присутствовать)
+        :return: извлеченный из тела аргумент, или None, если есть проблемы
+        """
+        out = None
+
+        all_type = None
+        filter = None
+        exclude = False
+        all_need = False
+        if 'all_type' in kwargs:
+            all_type = kwargs['all_type']
+        else:
+            if 'filter' in kwargs:
+                filter = kwargs['filter']
+            if 'exclude' in kwargs:
+                exclude = kwargs['exclude']
+            if 'all_need' in kwargs:
+                all_need = kwargs['all_need']
+
+        if k in b:
+            if type(b[k]) is dict:
+                out = True, []
+                for k1 in b[k]:
+                    if all_type is not None:
+                        if b[k][k1] is all_type:
+                            out[1].append((k1, b[k][k1]))
+                    else:
+                        if filter is not None:
+                            if k1 in filter:
+                                if b[k][k1] is filter[k1]:
+                                    out[1].append((k1, b[k][k1]))
+                            else:
+                                if not exclude:
+                                    out[1].append((k1, b[k][k1]))
+                        else:
+                            out[1].append((k1, b[k][k1]))
+            else:
+                out = False, '{} is not dict'.format(k)
+
+        if out[0] and all_need and filter is not None:
+            for key in filter:
+                if key not in out:
+                    out = False, 'Dict format of {} is invalid: no field {}'.format(k, key)
+
+        return out
+
+    def _parse_boolean(self, b, k):
+        """
+        Внутренний метод парсит булевую из dict-тела b под ключем k. Если в процессе извлечения аргумента произошла
+        какая-то ошибка, метод вернет None, и присвоит соответствующие значения self-переменным is_valid и error_m
+
+        :param b: dict-тело, полученной в результате парсинга json-тела, сформированного клиентом
+        :param k: str-значение ключа, под которым нужно искать нужный аргумент в теле b
+        :return: извлеченный из тела аргумент, или None, если есть проблемы
+        """
+        out = None
+
+        if k in b:
+            if type(b[k]) is str:
+                out = True, b[k]
+            else:
+                out = False, 'Invalid argument type: {} must be bool'.format(k)
+        else:
+            out = False, 'Invalid arguments: no {}'.format(k)
+
+        return out
+
+
+class RegnH(DefaultHandler):
     """
     -> Регистрация нового пользователя:
     Условия:
@@ -81,87 +259,54 @@ class RegnH(tornado.web.RequestHandler):
 
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.login = None
         self.password = None
         self.name = None
         self.data = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.RegnH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'login' in b:
-            self.login = b['login']
-            if len(self.login) < LOGIN_MIN_LEN or len(self.login) > LOGIN_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid login length : must be [{}, {}]'.format(LOGIN_MIN_LEN, LOGIN_MAX_LEN)
-                return
-            if not re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$', self.login):
-                self.is_valid = False
-                self.error_m = 'Invalid login form: must be an email'
-                return
+    def _parse_body(self, b):
+        login = self._parse_str(b, 'login', limits.LOGIN_MIN_LEN, limits.LOGIN_MAX_LEN,
+                                lambda i:
+                                'Invalid login form: must be an email'
+                                if not re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$'
+                                                , i) else None)
+        if login[0]:
+            self.login = login[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no login'
+            self.error_m = login[1]
             return
 
-        if 'password' in b:
-            self.password = b['password']
-            if len(self.password) < PASSWORD_MIN_LEN or len(self.password) > PASSWORD_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid password length : must be [{}, {}]'.format(PASSWORD_MIN_LEN, PASSWORD_MAX_LEN)
-                return
+        password = self._parse_str(b, 'password', limits.PASSWORD_MIN_LEN, limits.PASSWORD_MAX_LEN)
+        if password[0]:
+            self.password = password[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no password'
+            self.error_m = password[1]
             return
 
-        if 'name' in b:
-            self.name = b['name']
-            if len(self.name) < NAME_MIN_LEN or len(self.name) > NAME_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid name length : must be [{}, {}]'.format(NAME_MIN_LEN, NAME_MAX_LEN)
-                return
-            if not utils.chlat_dot_etc(self.name):
-                self.is_valid = False
-                self.error_m = 'Invalid argument: name must be lat || dot || _'
-                return
+        name = self._parse_str(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        if name[0]:
+            self.name = name[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no password'
+            self.error_m = name[1]
             return
 
-        if 'data' in b:
-            self.data = []
-            for k in b['data']:
-                if b['data'][k] is str:
-                    self.data.append((k, b['data'][k]))
-                elif b['data'][k] is int or b['data'][k] is float or b['data'][k] is bool:
-                    self.data.append((k, str(b['data'][k])))
-                else:
-                    self.is_valid = False
-                    self.error_m = 'Data format is invalid'
-                    return
+        data = self._parse_kv_dict(b, 'data', all_type=str)
+        if data[0]:
+            self.data = data[1]
+        else:
+            self.is_valid = False
+            self.error_m = data[1]
+            return
 
 
-class LoginH(tornado.web.RequestHandler):
+class LoginH(DefaultHandler):
     """
     -> Логин:
     Условия:
@@ -183,54 +328,32 @@ class LoginH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.login = None
         self.password = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.LoginH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'login' in b:
-            self.login = b['login']
-            if len(self.login) < LOGIN_MIN_LEN or len(self.login) > LOGIN_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid login length : must be [{}, {}]'.format(LOGIN_MIN_LEN, LOGIN_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        login = self._parse_str(b, 'login', limits.LOGIN_MIN_LEN, limits.LOGIN_MAX_LEN)
+        if login[0]:
+            self.login = login[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no login'
+            self.error_m = login[1]
             return
 
-        if 'password' in b:
-            self.password = b['password']
-            if len(self.password) < PASSWORD_MIN_LEN or len(self.password) > PASSWORD_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid password length : must be [{}, {}]'.format(PASSWORD_MIN_LEN, PASSWORD_MAX_LEN)
-                return
+        password = self._parse_str(b, 'password', limits.PASSWORD_MIN_LEN, limits.PASSWORD_MAX_LEN)
+        if password[0]:
+            self.password = password[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no password'
+            self.error_m = password[1]
             return
 
 
-class LogoutH(tornado.web.RequestHandler):
+class LogoutH(DefaultHandler):
     """
     -> Логаут:
     Условия:
@@ -250,38 +373,19 @@ class LogoutH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.tok = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.LogoutH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
     def parse_body(self, b):
-        if 'tok' in b:
-            self.tok = b['tok']
-            if len(self.tok) != TOKEN_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid tok length : must be {}'.format(TOKEN_LEN)
-                return
+        tok = self._parse_str(b, 'tok', limits.TOKEN_LEN, limits.TOKEN_LEN)
+        if tok[0]:
+            self.tok = tok[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no tok'
+            self.error_m = tok[1]
             return
 
 
@@ -302,7 +406,8 @@ class ProjectsCH(tornado.web.RequestHandler):
     @asynchronous
     def get(self):
         #TODO Отправка аргументов + self в task_queue на исполнение
-        pass
+        self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+        self.finish()
 
 
 class ProjectsH(tornado.web.RequestHandler):
@@ -337,18 +442,35 @@ class ProjectsH(tornado.web.RequestHandler):
         super().__init__(application, request, **kwargs)
         self.my = None
         self.s = None
+        self.is_valid = True
+        self.error_m = None
 
     @asynchronous
     def get(self):
         self.parse_query()
-        #TODO Отправка аргументов + self в task_queue на исполнение
+        if self.is_valid:
+            #TODO Отправка аргументов + self в task_queue на исполнение
+            self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+            self.finish()
+        else:
+            self.write(json.dumps({
+                "ans": "nok",
+                "m": self.write_error
+            }))
+            self.finish()
 
     def parse_query(self):
         q = utils.parse_query(self.request.query)
         if 'my' in q:
-            self.my = q['my']
+            self.my = q['my'] == '1'
         if 's' in q:
             self.s = q['s']
+            if len(self.s) < limits.STATUS_MIN_LEN or len(self.s) > limits.STATUS_MAX_LEN:
+                self.is_valid = False
+                self.error_m = 'Invalid argument s: length must be [{}, {}]'.format(limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN)
+            if self.s != 'open' and self.s != 'freeze' and self.s != 'closed' and self.s != 'fail':
+                self.is_valid = False
+                self.error_m = 'Invalid argument s: must be "open", "freeze", "closed" or "fail"'
 
 
 class ProjectsFH(tornado.web.RequestHandler):
@@ -399,22 +521,31 @@ class ProjectsFH(tornado.web.RequestHandler):
     def get(self):
         self.parse_query()
         if self.is_valid:
-            pass
             #TODO Отправка аргументов + self в task_queue на исполнение
+            self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+            self.finish()
         else:
-            self.write(r'"ans":"nok","m":{}'.format(self.error_m))
+            self.write(json.dumps({
+                "ans": "nok",
+                "m": self.error_m
+            }))
             self.finish()
 
     def parse_query(self):
         q = utils.parse_query(self.request.query)
         if 'byid' in q:
-            self.byid = q['byid']
+            try:
+                self.byid = int(q['byid'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: byid'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
         else:
             self.is_valid = False
             self.error_m = 'Empty'
 
 
-class MembAddH(tornado.web.RequestHandler):
+class MembAddH(DefaultHandler):
     """
     -> Добавить участника в проект:
     Условия:
@@ -439,82 +570,49 @@ class MembAddH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.memb_id = None
         self.proj_id = None
         self.role = None
         self.desc = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.MembAddH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'memb_id' in b:
-            self.memb_id = b['memb_id']
-            if len(self.memb_id) < ID_MIN_LEN or len(self.memb_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid mem_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        if memb_id[0]:
+            self.memb_id = memb_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no memb_id'
-            return
+            self.error_m = memb_id[1]
 
-        if 'proj_id' in b:
-            self.proj_id = b['proj_id']
-            if len(self.proj_id) < ID_MIN_LEN or len(self.proj_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid proj_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        if proj_id[0]:
+            self.proj_id = proj_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no proj_id'
-            return
+            self.error_m = proj_id[1]
 
-        if 'role' in b:
-            self.role = b['role']
-            if len(self.role) < ROLE_MIN_LEN or len(self.role) > ROLE_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid role length : must be [{}, {}]'.format(ROLE_MIN_LEN, ROLE_MAX_LEN)
-                return
-            if self.role != 'man' and self.role != 'perf' and self.role != 'vis':
-                self.is_valid = False
-                self.error_m = r'Invalid role : must be "man", "perf" or "vis"'
-                return
+        role = self._parse_str(b, 'role', limits.ROLE_MIN_LEN, limits.ROLE_MAX_LEN,
+                               lambda i: 'Invalid role : must be "man", "perf" or "vis"'
+                               if i != 'man' and i != 'perf' and i != 'vis'
+                               else None)
+        if role[0]:
+            self.role = role[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no role'
-            return
+            self.error_m = role[1]
 
-        if 'desc' in b:
-            self.desc = b['desc']
-            if len(self.desc) < 1 or len(self.desc) > VARCHAR_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid desc length : must be [{}, {}]'.format(1, VARCHAR_MAX_LEN)
-                return
+        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no desc'
-            return
+            self.error_m = desc[1]
 
 
-class MembRemH(tornado.web.RequestHandler):
+class MembRemH(DefaultHandler):
     """
     -> Удалить участника из проекта(или удалиться самому):
     Условия:
@@ -539,66 +637,38 @@ class MembRemH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.memb_id = None
         self.proj_id = None
         self.desc = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.MembRemH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'memb_id' in b:
-            self.memb_id = b['memb_id']
-            if len(self.memb_id) < ID_MIN_LEN or len(self.memb_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid mem_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        if memb_id[0]:
+            self.memb_id = memb_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no memb_id'
-            return
+            self.error_m = memb_id[1]
 
-        if 'proj_id' in b:
-            self.proj_id = b['proj_id']
-            if len(self.proj_id) < ID_MIN_LEN or len(self.proj_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid proj_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        if proj_id[0]:
+            self.proj_id = proj_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no proj_id'
-            return
+            self.error_m = proj_id[1]
 
-        if 'desc' in b:
-            self.desc = b['desc']
-            if len(self.desc) < 1 or len(self.desc) > VARCHAR_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid desc length : must be [{}, {}]'.format(1, VARCHAR_MAX_LEN)
-                return
+        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no desc'
-            return
+            self.error_m = desc[1]
 
 
-class MembChrH(tornado.web.RequestHandler):
+class MembChrH(DefaultHandler):
     """
     -> Изменить роль участника проекта:
     Условия:
@@ -625,78 +695,49 @@ class MembChrH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.memb_id = None
         self.proj_id = None
         self.new_r = None
         self.desc = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.MembChrH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'memb_id' in b:
-            self.memb_id = b['memb_id']
-            if len(self.memb_id) < ID_MIN_LEN or len(self.memb_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid mem_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        if memb_id[0]:
+            self.memb_id = memb_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no memb_id'
-            return
+            self.error_m = memb_id[1]
 
-        if 'proj_id' in b:
-            self.proj_id = b['proj_id']
-            if len(self.proj_id) < ID_MIN_LEN or len(self.proj_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid proj_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        if proj_id[0]:
+            self.proj_id = proj_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no proj_id'
-            return
+            self.error_m = proj_id[1]
 
-        if 'new_r' in b:
-            self.new_r = b['new_r']
-            if len(self.new_r) < ROLE_MIN_LEN or len(self.new_r) > ROLE_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid new_r length : must be [{}, {}]'.format(ROLE_MIN_LEN, ROLE_MAX_LEN)
-                return
+        new_r = self._parse_str(b, 'new_r', limits.ROLE_MIN_LEN, limits.ROLE_MAX_LEN,
+                                lambda i: 'Invalid new_role : must be "man", "perf" or "vis"'
+                                if i != 'man' and i != 'perf' and i != 'vis'
+                                else None)
+        if new_r[0]:
+            self.new_r = new_r[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no new_r'
-            return
+            self.error_m = new_r[1]
 
-        if 'desc' in b:
-            self.desc = b['desc']
-            if len(self.desc) < 1 or len(self.desc) > VARCHAR_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid desc length : must be [{}, {}]'.format(1, VARCHAR_MAX_LEN)
-                return
+        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no desc'
-            return
+            self.error_m = desc[1]
 
 
-class ProjectsAddH(tornado.web.RequestHandler):
+class ProjectsAddH(DefaultHandler):
     """
     -> Создать проект:
     Условия:
@@ -722,55 +763,32 @@ class ProjectsAddH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.name = None
         self.inf = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.ProjectsAddH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'name' in b:
-            self.name = b['name']
-            if len(self.name) < NAME_MIN_LEN or len(self.name) > NAME_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid name length : must be [{}, {}]'.format(NAME_MIN_LEN, NAME_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        name = self._parse_str(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        if name[0]:
+            self.name = name[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no name'
+            self.error_m = name[1]
             return
 
-        if 'inf' in b:
-            self.inf = []
-            for k in b['inf']:
-                if b['inf'][k] is str:
-                    self.inf.append((k, b['inf'][k]))
-                elif b['inf'][k] is int or b['inf'][k] is float or b['inf'][k] is bool:
-                    self.inf.append((k, str(b['inf'][k])))
-                else:
-                    self.is_valid = False
-                    self.error_m = 'Inf format is invalid'
-                    return
+        inf = self._parse_kv_dict(b, 'inf', all_type=str)
+        if inf[0]:
+            self.inf = inf[1]
+        else:
+            self.is_valid = False
+            self.error_m = inf[1]
+            return
 
 
-class ProjectsHieAddH(tornado.web.RequestHandler):
+class ProjectsHieAddH(DefaultHandler):
     """
     -> Назначить для проекта родительский проект:
     Условия:
@@ -793,54 +811,32 @@ class ProjectsHieAddH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.parent_id = None
         self.child_id = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.ProjectsHieAddH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'parent_id' in b:
-            self.parent_id = b['parent_id']
-            if len(self.parent_id) < ID_MIN_LEN or len(self.parent_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid parent_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        if parent_id[0]:
+            self.parent_id = parent_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no parent_id'
+            self.error_m = parent_id[1]
             return
 
-        if 'child_id' in b:
-            self.child_id = b['child_id']
-            if len(self.child_id) < ID_MIN_LEN or len(self.child_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid child_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+        child_id = self._parse_int(b, 'child_id', limits.LONG_MIN, limits.LONG_MAX)
+        if child_id[0]:
+            self.child_id = child_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no child_id'
+            self.error_m = child_id[1]
             return
 
 
-class ProjectsHieRemH(tornado.web.RequestHandler):
+class ProjectsHieRemH(DefaultHandler):
     """
     -> Удалить проект из отношения родитель-ребенок:
     Условия:
@@ -863,54 +859,32 @@ class ProjectsHieRemH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.parent_id = None
         self.child_id = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.ProjectsHieRemH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'parent_id' in b:
-            self.parent_id = b['parent_id']
-            if len(self.parent_id) < ID_MIN_LEN or len(self.parent_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid parent_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        if parent_id[0]:
+            self.parent_id = parent_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no parent_id'
+            self.error_m = parent_id[1]
             return
 
-        if 'child_id' in b:
-            self.child_id = b['child_id']
-            if len(self.child_id) < ID_MIN_LEN or len(self.child_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid child_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+        child_id = self._parse_int(b, 'child_id', limits.LONG_MIN, limits.LONG_MAX)
+        if child_id[0]:
+            self.child_id = child_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no child_id'
+            self.error_m = child_id[1]
             return
 
 
-class ProjectsEditH(tornado.web.RequestHandler):
+class ProjectsEditH(DefaultHandler):
     """
     -> Редактировать проект:
     Условия:
@@ -935,64 +909,40 @@ class ProjectsEditH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.proj_id = None
         self.inf = None
         self.s = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.ProjectsEditH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'proj_id' in b:
-            self.proj_id = b['proj_id']
-            if len(self.proj_id) < ID_MIN_LEN or len(self.proj_id) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid proj_id length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        if proj_id[0]:
+            self.parent_id = proj_id[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no proj_id'
+            self.error_m = proj_id[1]
             return
 
-        if 'inf' in b:
-            self.inf = []
-            for k in b['inf']:
-                if b['inf'][k] is str:
-                    self.inf.append((k, b['inf'][k]))
-                elif b['inf'][k] is int or b['inf'][k] is float or b['inf'][k] is bool:
-                    self.inf.append((k, str(b['inf'][k])))
-                else:
-                    self.is_valid = False
-                    self.error_m = 'Inf format is invalid'
-                    return
-
-        if 's' in b:
-            self.s = b['s']
-            if len(self.s) < STATUS_MIN_LEN or len(self.s) > STATUS_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid s length : must be [{}, {}]'.format(STATUS_MIN_LEN, STATUS_MAX_LEN)
-                return
+        inf = self._parse_kv_dict(b, 'inf', all_type=str)
+        if inf[0]:
+            self.inf = inf[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no s'
+            self.error_m = inf[1]
             return
+
+        s = self._parse_str(b, 's', limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN,
+                            lambda i: 'Invalid argument s: must be "open", "freeze", "closed" or "fail"'
+                            if i != 'open' and i != 'freeze' and i != 'closed' and i != 'fail'
+                            else None)
+        if s[0]:
+            self.s = s[1]
+        else:
+            self.is_valid = False
+            self.error_m = s[1]
 
 
 class TasksCH(tornado.web.RequestHandler):
@@ -1024,16 +974,25 @@ class TasksCH(tornado.web.RequestHandler):
     def get(self):
         self.parse_query()
         if self.is_valid:
-            pass
             #TODO Отправка аргументов + self в task_queue на исполнение
+            self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+            self.finish()
         else:
-            self.write(r'"ans":"nok","m":{}'.format(self.error_m))
+            self.write(json.dumps({
+                "ans": "nok",
+                "m": self.error_m
+            }))
             self.finish()
 
     def parse_query(self):
         q = utils.parse_query(self.request.query)
         if 'proj_id' in q:
-            self.proj_id = q['proj_id']
+            try:
+                self.proj_id = int(q['proj_id'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: proj_id'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
         else:
             self.is_valid = False
             self.error_m = 'No such project'
@@ -1086,25 +1045,44 @@ class TasksH(tornado.web.RequestHandler):
     def get(self):
         self.parse_query()
         if self.is_valid:
-            pass
             #TODO Отправка аргументов + self в task_queue на исполнение
+            self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+            self.finish()
         else:
-            self.write(r'"ans":"nok","m":{}'.format(self.error_m))
+            self.write(json.dumps({
+                "ans": "nok",
+                "m": self.error_m
+            }))
             self.finish()
 
     def parse_query(self):
         q = utils.parse_query(self.request.query)
         if 'proj_id' in q:
-            self.proj_id = q['proj_id']
+            try:
+                self.proj_id = int(q['proj_id'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: proj_id'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
         else:
             self.is_valid = False
             self.error_m = 'No such project'
 
         if 'from' in q:
-            self.from_ = q['from']
+            try:
+                self.from_ = int(q['from'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: from'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
 
         if 'count' in q:
-            self.count = q['count']
+            try:
+                self.count = int(q['count'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: count'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
 
 
 class TasksFH(tornado.web.RequestHandler):
@@ -1152,22 +1130,31 @@ class TasksFH(tornado.web.RequestHandler):
     def get(self):
         self.parse_query()
         if self.is_valid:
-            pass
             #TODO Отправка аргументов + self в task_queue на исполнение
+            self.write('{"ans":"ok","m":"Isn\'t implemented"}')
+            self.finish()
         else:
-            self.write(r'"ans":"nok","m":{}'.format(self.error_m))
+            self.write(json.dumps({
+                "ans": "nok",
+                "m": self.error_m
+            }))
             self.finish()
 
     def parse_query(self):
         q = utils.parse_query(self.request.query)
         if 'byid' in q:
-            self.byid = q['byid']
+            try:
+                self.byid = int(q['byid'])
+            except Exception as e:
+                self.is_valid = False
+                self.error_m = 'Invalid argument: byid'
+                logging.warning('Exception on {} : parse_query - {}'.format(self.__class__.__name__, e.args))
         else:
             self.is_valid = False
             self.error_m = 'Empty'
 
 
-class TasksEditH(tornado.web.RequestHandler):
+class TasksEditH(DefaultHandler):
     """
     -> Редактирование задачи:
     Условия:
@@ -1193,71 +1180,68 @@ class TasksEditH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.byid = None
         self.name = None
         self.desc = None
         self.time = None
         self.ready = None
         self.parent_id = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.TasksEditH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 'byid' in b:
-            self.byid = b['byid']
-            if len(self.byid) < ID_MIN_LEN or len(self.byid) > ID_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid byid length : must be [{}, {}]'.format(ID_MIN_LEN, ID_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        byid = self._parse_int(b, 'byid', limits.LONG_MIN, limits.LONG_MAX)
+        if byid[0]:
+            self.byid = byid[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no byid'
+            self.error_m = byid[1]
             return
 
-        if 'name' in b:
-            self.name = b['name']
-            if len(self.name) < NAME_MIN_LEN or len(self.name) > NAME_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid name length : must be [{}, {}]'.format(NAME_MIN_LEN, NAME_MAX_LEN)
-                return
+        name = self._parse_int(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        if name[0]:
+            self.name = name[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no name'
+            self.error_m = name[1]
             return
 
-        if 'desc' in b:
-            self.desc = b['desc']
-            if len(self.desc) < 1 or len(self.desc) > VARCHAR_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid desc length : must be [{}, {}]'.format(1, VARCHAR_MAX_LEN)
-                return
+        desc = self._parse_int(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no desc'
+            self.error_m = desc[1]
             return
 
-        #TODO Работа с числовым типом - byid, time, ready, parent_id
+        time = self._parse_int(b, 'time', limits.LONG_MIN, limits.LONG_MAX)
+        if time[0]:
+            self.time = time[1]
+        else:
+            self.is_valid = False
+            self.error_m = time[1]
+            return
+
+        ready = self._parse_int(b, 'ready', 0, 100)
+        if ready[0]:
+            self.ready = ready[1]
+        else:
+            self.is_valid = False
+            self.error_m = ready[1]
+            return
+
+        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        if parent_id[0]:
+            self.parent_id = parent_id[1]
+        else:
+            self.is_valid = False
+            self.error_m = parent_id[1]
+            return
 
 
-class TasksEditSH(tornado.web.RequestHandler):
+class TasksEditSH(DefaultHandler):
     """
     -> Изменение статуса задачи:
     Условия:
@@ -1280,49 +1264,38 @@ class TasksEditSH(tornado.web.RequestHandler):
     """
     def __init__(self, application, request, **kwargs):
         super().__init__(application, request, **kwargs)
-        self.is_valid = True
         self.byid = None
         self.s = None
         self.desc = None
-        self.error_m = None
 
     @asynchronous
     def post(self):
-        if self.request.body is not None:
-            try:
-                in_body = json.loads(self.request.body.decode('utf-8'))
-                self.parse_body(in_body)
-                if not self.is_valid:
-                    self.write(r'{"ans":"nok","m":{}}'.format(self.error_m))
-                else:
-                    #TODO Отправка аргументов + self в task_queue на исполнение
-                    return
-            except Exception as e:
-                logging.warning('Exception on web_tier.TasksEditSH : post - {}'.format(e))
-                self.set_status(400)
-        else:
-            self.set_status(400)
-        self.finish()
+        self._post_pat()
 
-    def parse_body(self, b):
-        if 's' in b:
-            self.s = b['s']
-            if len(self.s) < STATUS_MIN_LEN or len(self.s) > STATUS_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid s length : must be [{}, {}]'.format(STATUS_MIN_LEN, STATUS_MAX_LEN)
-                return
+    def _parse_body(self, b):
+        byid = self._parse_int(b, 'byid', limits.LONG_MIN, limits.LONG_MAX)
+        if byid[0]:
+            self.byid = byid[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no s'
+            self.error_m = byid[1]
             return
 
-        if 'desc' in b:
-            self.desc = b['desc']
-            if len(self.desc) < 1 or len(self.desc) > VARCHAR_MAX_LEN:
-                self.is_valid = False
-                self.error_m = 'Invalid desc length : must be [{}, {}]'.format(1, VARCHAR_MAX_LEN)
-                return
+        s = self._parse_int(b, 's', limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN,
+                            lambda i: 'Invalid status : must be "new", "open", "closed" or "failed"'
+                            if i != 'new' and i != 'open' and i != 'closed' and i != 'failed'
+                            else None)
+        if s[0]:
+            self.s = s[1]
         else:
             self.is_valid = False
-            self.error_m = 'Invalid arguments: no desc'
+            self.error_m = s[1]
+            return
+
+        desc = self._parse_int(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
+        else:
+            self.is_valid = False
+            self.error_m = desc[1]
             return

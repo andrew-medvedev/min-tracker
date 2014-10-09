@@ -53,7 +53,7 @@ class DefaultHandler(tornado.web.RequestHandler):
 
     def _post_pat(self):
         if self.request.body is not None:
-            # try:
+            try:
                 in_body = json.loads(self.request.body.decode('utf-8'))
                 self._parse_body(in_body)
                 if not self.is_valid:
@@ -64,9 +64,9 @@ class DefaultHandler(tornado.web.RequestHandler):
                 else:
                     self._process_req()
                     return
-            # except Exception as e:
-            #     logging.warning('Exception on {} : post - {}'.format(self.__class__.__name__, e.args))
-            #     self.set_status(400)
+            except Exception as e:
+                logging.warning('Exception on {} : post - {}'.format(self.__class__.__name__, e.args))
+                self.set_status(400)
         else:
             self.set_status(400)
         self.finish()

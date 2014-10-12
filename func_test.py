@@ -1,6 +1,6 @@
 __author__ = 'a.medvedev'
 
-from urllib.request import urlopen, Request
+from urllib.request import urlopen, Request, HTTPError
 import json
 
 HOST = 'http://localhost:1337'
@@ -9,12 +9,14 @@ HOST = 'http://localhost:1337'
 def http(method, path, body=None):
     req = Request(HOST + path, bytes(json.dumps(body), encoding='utf-8'))
     req.get_method = lambda: method
-
-    response = urlopen(req)
+    try:
+        response = urlopen(req)
+    except HTTPError as http_err:
+        return http_err.getcode(), None, None
     code = response.getcode()
     out_raw, out = None, None
     if code == 200:
-        out_raw = response.read.decode('utf-8')
+        out_raw = response.read().decode('utf-8')
         try:
             out = json.loads(out_raw)
         except:
@@ -23,12 +25,12 @@ def http(method, path, body=None):
     return code, out_raw, out
 
 
-def fail():
-    print('FAIL')
+def fail(wut):
+    print('FAIL - {}'.format(wut))
 
 
-def success():
-    print('SUCCESS')
+def success(wut):
+    print('SUCCESS - {}'.format(wut))
 
 
 def test_1():
@@ -44,16 +46,16 @@ def test_1():
         }
     })
     if code != 200:
-        fail()
+        fail('test_1')
         return False
     elif out is None:
-        fail()
+        fail('test_1')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_1')
         return True
     else:
-        fail()
+        fail('test_1')
         return False
 
 
@@ -64,16 +66,16 @@ def test_2():
         'password': '123456789'
     })
     if code != 200:
-        fail()
+        fail('test_2')
         return False
     elif out is None:
-        fail()
+        fail('test_2')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_2')
         return True
     else:
-        fail()
+        fail('test_2')
         return False
 
 
@@ -83,16 +85,16 @@ def test_3():
         'tok': 'vj58jrf5s0'
     })
     if code != 200:
-        fail()
+        fail('test_3')
         return False
     elif out is None:
-        fail()
+        fail('test_3')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_3')
         return True
     else:
-        fail()
+        fail('test_3')
         return False
 
 
@@ -100,16 +102,16 @@ def test_4():
     #/api/projects/c
     code, out_raw, out = http('GET', '/api/projects/c')
     if code != 200:
-        fail()
+        fail('test_4')
         return False
     elif out is None:
-        fail()
+        fail('test_4')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_4')
         return True
     else:
-        fail()
+        fail('test_4')
         return False
 
 
@@ -117,16 +119,16 @@ def test_5():
     #/api/projects
     code, out_raw, out = http('GET', '/api/projects?my=1&s=open')
     if code != 200:
-        fail()
+        fail('test_5')
         return False
     elif out is None:
-        fail()
+        fail('test_5')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_5')
         return True
     else:
-        fail()
+        fail('test_5')
         return False
 
 
@@ -134,16 +136,16 @@ def test_6():
     #/api/projects/f
     code, out_raw, out = http('GET', '/api/projects/f?byid=3')
     if code != 200:
-        fail()
+        fail('test_6')
         return False
     elif out is None:
-        fail()
+        fail('test_6')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_6')
         return True
     else:
-        fail()
+        fail('test_6')
         return False
 
 
@@ -156,16 +158,16 @@ def test_7():
         'desc': 'Покачену'
     })
     if code != 200:
-        fail()
+        fail('test_7')
         return False
     elif out is None:
-        fail()
+        fail('test_7')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_7')
         return True
     else:
-        fail()
+        fail('test_7')
         return False
 
 
@@ -177,16 +179,16 @@ def test_8():
         'desc': 'Покачену'
     })
     if code != 200:
-        fail()
+        fail('test_8')
         return False
     elif out is None:
-        fail()
+        fail('test_8')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_8')
         return True
     else:
-        fail()
+        fail('test_8')
         return False
 
 
@@ -199,16 +201,16 @@ def test_9():
         "desc": "Повышение"
     })
     if code != 200:
-        fail()
+        fail('test_9')
         return False
     elif out is None:
-        fail()
+        fail('test_9')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_9')
         return True
     else:
-        fail()
+        fail('test_9')
         return False
 
 
@@ -221,16 +223,16 @@ def test_10():
         }
     })
     if code != 200:
-        fail()
+        fail('test_10')
         return False
     elif out is None:
-        fail()
+        fail('test_10')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_10')
         return True
     else:
-        fail()
+        fail('test_10')
         return False
 
 
@@ -241,16 +243,16 @@ def test_11():
         "child_id": 37
     })
     if code != 200:
-        fail()
+        fail('test_11')
         return False
     elif out is None:
-        fail()
+        fail('test_11')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_11')
         return True
     else:
-        fail()
+        fail('test_11')
         return False
 
 
@@ -261,16 +263,16 @@ def test_12():
         "child_id": 37
     })
     if code != 200:
-        fail()
+        fail('test_12')
         return False
     elif out is None:
-        fail()
+        fail('test_12')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_12')
         return True
     else:
-        fail()
+        fail('test_12')
         return False
 
 
@@ -284,67 +286,67 @@ def test_13():
         "s": "closed"
     })
     if code != 200:
-        fail()
+        fail('test_13')
         return False
     elif out is None:
-        fail()
+        fail('test_13')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_13')
         return True
     else:
-        fail()
+        fail('test_13')
         return False
 
 
 def test_14():
     #/api/tasks/c
-    code, out_raw, out = http('POST', '/api/tasks/c?proj_id=13')
+    code, out_raw, out = http('GET', '/api/tasks/c?proj_id=13')
     if code != 200:
-        fail()
+        fail('test_14 #1')
         return False
     elif out is None:
-        fail()
+        fail('test_14 #2')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_14 #3')
         return True
     else:
-        fail()
+        fail('test_14 #4')
         return False
 
 
 def test_15():
     #/api/tasks
-    code, out_raw, out = http('POST', '/api/tasks?proj_id=13&from=0&count=20')
+    code, out_raw, out = http('GET', '/api/tasks?proj_id=13&from=0&count=20')
     if code != 200:
-        fail()
+        fail('test_15')
         return False
     elif out is None:
-        fail()
+        fail('test_15')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_15')
         return True
     else:
-        fail()
+        fail('test_15')
         return False
 
 
 def test_16():
     #/api/tasks/f
-    code, out_raw, out = http('POST', '/api/tasks/f?byid=13')
+    code, out_raw, out = http('GET', '/api/tasks/f?byid=13')
     if code != 200:
-        fail()
+        fail('test_16')
         return False
     elif out is None:
-        fail()
+        fail('test_16')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_16')
         return True
     else:
-        fail()
+        fail('test_16')
         return False
 
 
@@ -359,16 +361,16 @@ def test_17():
         "parent_id": 0
     })
     if code != 200:
-        fail()
+        fail('test_17')
         return False
     elif out is None:
-        fail()
+        fail('test_17')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_17')
         return True
     else:
-        fail()
+        fail('test_17')
         return False
 
 
@@ -380,21 +382,43 @@ def test_18():
         "desc": "В работе"
     })
     if code != 200:
-        fail()
+        fail('test_18')
         return False
     elif out is None:
-        fail()
+        fail('test_18')
         return False
     elif 'ans' in out and 'm' in out:
-        success()
+        success('test_18')
         return True
     else:
-        fail()
+        fail('test_18')
         return False
 
 
 def main():
-    pass
+    testing = [
+        test_1,
+        test_2,
+        test_3,
+        test_4,
+        test_5,
+        test_6,
+        test_7,
+        test_8,
+        test_9,
+        test_10,
+        test_11,
+        test_12,
+        test_13,
+        test_14,
+        test_15,
+        test_16,
+        test_17,
+        test_18
+    ]
+    for test in testing:
+        if not test():
+            return
 
 
 if __name__ == '__main__':

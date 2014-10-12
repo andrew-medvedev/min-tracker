@@ -24,7 +24,7 @@ def init_web_tier(host, port):
         (r'/api/memb/rem', MembRemH),
         (r'/api/memb/chr', MembChrH),
         (r'/api/projects/add', ProjectsAddH),
-        (r'/api/project/hie/add', ProjectsHieAddH),
+        (r'/api/projects/hie/add', ProjectsHieAddH),
         (r'/api/projects/hie/rem', ProjectsHieRemH),
         (r'/api/projects/edit', ProjectsEditH),
         (r'/api/tasks/c', TasksCH),

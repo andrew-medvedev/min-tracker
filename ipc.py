@@ -2,6 +2,29 @@ __author__ = 'a.medvedev'
 
 import socket
 
+cluster = None
+server_sock = None
+sock = None
+
+
+def start_cluster(cluster_representation):
+    cluster = cluster_representation
+    serve_port = None
+    this = None
+    for link in cluster_representation.links:
+        if link.b.is_this:
+            serve_port = link.on_port
+            break
+    for node in cluster_representation.nodes:
+        if node.is_this:
+            this = node
+            break
+    if serve_port is not None:
+        server_sock = socket.socket()
+        server_sock.bind((this.address, serve_port))
+        server_sock.listen(1)
+
+
 HOST = 'localhost'
 PORT = 1488
 BUF_SIZE = 16

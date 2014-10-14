@@ -7,7 +7,7 @@
 """
 
 __author__ = 'a.medvedev'
-__version__ = '0.2_3'
+__version__ = '0.2_5'
 
 import web_tier
 import sys

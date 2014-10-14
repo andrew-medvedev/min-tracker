@@ -2,9 +2,10 @@ __author__ = 'a.medvedev'
 
 
 class ClusterRepresentation():
-    def __init__(self, nodes, links):
+    def __init__(self, nodes, links, pass_phrase):
         self.nodes = nodes
         self.links = links
+        self.pass_phrase = pass_phrase
 
 
 class ClusterNode():

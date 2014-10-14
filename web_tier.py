@@ -5,7 +5,7 @@ import abc
 import json
 import logging
 import utils
-import limits
+import constants
 import tornado.web
 import tornado.ioloop
 import tornado.httputil
@@ -269,7 +269,7 @@ class RegnH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        login = self._parse_str(b, 'login', limits.LOGIN_MIN_LEN, limits.LOGIN_MAX_LEN,
+        login = self._parse_str(b, 'login', constants.LOGIN_MIN_LEN, constants.LOGIN_MAX_LEN,
                                 lambda i:
                                 'Invalid login form: must be an email'
                                 if not re.match('^[_a-z0-9-]+(\.[_a-z0-9-]+)*@[a-z0-9-]+(\.[a-z0-9-]+)*(\.[a-z]{2,4})$'
@@ -281,7 +281,7 @@ class RegnH(DefaultHandler):
             self.error_m = login[1]
             return
 
-        password = self._parse_str(b, 'password', limits.PASSWORD_MIN_LEN, limits.PASSWORD_MAX_LEN)
+        password = self._parse_str(b, 'password', constants.PASSWORD_MIN_LEN, constants.PASSWORD_MAX_LEN)
         if password[0]:
             self.password = password[1]
         else:
@@ -289,7 +289,7 @@ class RegnH(DefaultHandler):
             self.error_m = password[1]
             return
 
-        name = self._parse_str(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        name = self._parse_str(b, 'name', constants.NAME_MIN_LEN, constants.NAME_MAX_LEN)
         if name[0]:
             self.name = name[1]
         else:
@@ -336,7 +336,7 @@ class LoginH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        login = self._parse_str(b, 'login', limits.LOGIN_MIN_LEN, limits.LOGIN_MAX_LEN)
+        login = self._parse_str(b, 'login', constants.LOGIN_MIN_LEN, constants.LOGIN_MAX_LEN)
         if login[0]:
             self.login = login[1]
         else:
@@ -344,7 +344,7 @@ class LoginH(DefaultHandler):
             self.error_m = login[1]
             return
 
-        password = self._parse_str(b, 'password', limits.PASSWORD_MIN_LEN, limits.PASSWORD_MAX_LEN)
+        password = self._parse_str(b, 'password', constants.PASSWORD_MIN_LEN, constants.PASSWORD_MAX_LEN)
         if password[0]:
             self.password = password[1]
         else:
@@ -380,7 +380,7 @@ class LogoutH(DefaultHandler):
         self._post_pat()
 
     def parse_body(self, b):
-        tok = self._parse_str(b, 'tok', limits.TOKEN_LEN, limits.TOKEN_LEN)
+        tok = self._parse_str(b, 'tok', constants.TOKEN_LEN, constants.TOKEN_LEN)
         if tok[0]:
             self.tok = tok[1]
         else:
@@ -465,9 +465,9 @@ class ProjectsH(tornado.web.RequestHandler):
             self.my = q['my'] == '1'
         if 's' in q:
             self.s = q['s']
-            if len(self.s) < limits.STATUS_MIN_LEN or len(self.s) > limits.STATUS_MAX_LEN:
+            if len(self.s) < constants.STATUS_MIN_LEN or len(self.s) > constants.STATUS_MAX_LEN:
                 self.is_valid = False
-                self.error_m = 'Invalid argument s: length must be [{}, {}]'.format(limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN)
+                self.error_m = 'Invalid argument s: length must be [{}, {}]'.format(constants.STATUS_MIN_LEN, constants.STATUS_MAX_LEN)
             if self.s != 'open' and self.s != 'freeze' and self.s != 'closed' and self.s != 'fail':
                 self.is_valid = False
                 self.error_m = 'Invalid argument s: must be "open", "freeze", "closed" or "fail"'
@@ -580,21 +580,21 @@ class MembAddH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        memb_id = self._parse_int(b, 'memb_id', constants.LONG_MIN, constants.LONG_MAX)
         if memb_id[0]:
             self.memb_id = memb_id[1]
         else:
             self.is_valid = False
             self.error_m = memb_id[1]
 
-        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        proj_id = self._parse_int(b, 'proj_id', constants.LONG_MIN, constants.LONG_MAX)
         if proj_id[0]:
             self.proj_id = proj_id[1]
         else:
             self.is_valid = False
             self.error_m = proj_id[1]
 
-        role = self._parse_str(b, 'role', limits.ROLE_MIN_LEN, limits.ROLE_MAX_LEN,
+        role = self._parse_str(b, 'role', constants.ROLE_MIN_LEN, constants.ROLE_MAX_LEN,
                                lambda i: 'Invalid role : must be "man", "perf" or "vis"'
                                if i != 'man' and i != 'perf' and i != 'vis'
                                else None)
@@ -604,7 +604,7 @@ class MembAddH(DefaultHandler):
             self.is_valid = False
             self.error_m = role[1]
 
-        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        desc = self._parse_str(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
         if desc[0]:
             self.desc = desc[1]
         else:
@@ -646,21 +646,21 @@ class MembRemH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        memb_id = self._parse_int(b, 'memb_id', constants.LONG_MIN, constants.LONG_MAX)
         if memb_id[0]:
             self.memb_id = memb_id[1]
         else:
             self.is_valid = False
             self.error_m = memb_id[1]
 
-        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        proj_id = self._parse_int(b, 'proj_id', constants.LONG_MIN, constants.LONG_MAX)
         if proj_id[0]:
             self.proj_id = proj_id[1]
         else:
             self.is_valid = False
             self.error_m = proj_id[1]
 
-        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        desc = self._parse_str(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
         if desc[0]:
             self.desc = desc[1]
         else:
@@ -705,21 +705,21 @@ class MembChrH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        memb_id = self._parse_int(b, 'memb_id', limits.LONG_MIN, limits.LONG_MAX)
+        memb_id = self._parse_int(b, 'memb_id', constants.LONG_MIN, constants.LONG_MAX)
         if memb_id[0]:
             self.memb_id = memb_id[1]
         else:
             self.is_valid = False
             self.error_m = memb_id[1]
 
-        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        proj_id = self._parse_int(b, 'proj_id', constants.LONG_MIN, constants.LONG_MAX)
         if proj_id[0]:
             self.proj_id = proj_id[1]
         else:
             self.is_valid = False
             self.error_m = proj_id[1]
 
-        new_r = self._parse_str(b, 'new_r', limits.ROLE_MIN_LEN, limits.ROLE_MAX_LEN,
+        new_r = self._parse_str(b, 'new_r', constants.ROLE_MIN_LEN, constants.ROLE_MAX_LEN,
                                 lambda i: 'Invalid new_role : must be "man", "perf" or "vis"'
                                 if i != 'man' and i != 'perf' and i != 'vis'
                                 else None)
@@ -729,7 +729,7 @@ class MembChrH(DefaultHandler):
             self.is_valid = False
             self.error_m = new_r[1]
 
-        desc = self._parse_str(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        desc = self._parse_str(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
         if desc[0]:
             self.desc = desc[1]
         else:
@@ -771,7 +771,7 @@ class ProjectsAddH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        name = self._parse_str(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        name = self._parse_str(b, 'name', constants.NAME_MIN_LEN, constants.NAME_MAX_LEN)
         if name[0]:
             self.name = name[1]
         else:
@@ -819,7 +819,7 @@ class ProjectsHieAddH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        parent_id = self._parse_int(b, 'parent_id', constants.LONG_MIN, constants.LONG_MAX)
         if parent_id[0]:
             self.parent_id = parent_id[1]
         else:
@@ -827,7 +827,7 @@ class ProjectsHieAddH(DefaultHandler):
             self.error_m = parent_id[1]
             return
 
-        child_id = self._parse_int(b, 'child_id', limits.LONG_MIN, limits.LONG_MAX)
+        child_id = self._parse_int(b, 'child_id', constants.LONG_MIN, constants.LONG_MAX)
         if child_id[0]:
             self.child_id = child_id[1]
         else:
@@ -867,7 +867,7 @@ class ProjectsHieRemH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        parent_id = self._parse_int(b, 'parent_id', constants.LONG_MIN, constants.LONG_MAX)
         if parent_id[0]:
             self.parent_id = parent_id[1]
         else:
@@ -875,7 +875,7 @@ class ProjectsHieRemH(DefaultHandler):
             self.error_m = parent_id[1]
             return
 
-        child_id = self._parse_int(b, 'child_id', limits.LONG_MIN, limits.LONG_MAX)
+        child_id = self._parse_int(b, 'child_id', constants.LONG_MIN, constants.LONG_MAX)
         if child_id[0]:
             self.child_id = child_id[1]
         else:
@@ -918,7 +918,7 @@ class ProjectsEditH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        proj_id = self._parse_int(b, 'proj_id', limits.LONG_MIN, limits.LONG_MAX)
+        proj_id = self._parse_int(b, 'proj_id', constants.LONG_MIN, constants.LONG_MAX)
         if proj_id[0]:
             self.parent_id = proj_id[1]
         else:
@@ -934,7 +934,7 @@ class ProjectsEditH(DefaultHandler):
             self.error_m = inf[1]
             return
 
-        s = self._parse_str(b, 's', limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN,
+        s = self._parse_str(b, 's', constants.STATUS_MIN_LEN, constants.STATUS_MAX_LEN,
                             lambda i: 'Invalid argument s: must be "open", "freeze", "closed" or "fail"'
                             if i != 'open' and i != 'freeze' and i != 'closed' and i != 'fail'
                             else None)
@@ -1192,7 +1192,7 @@ class TasksEditH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        byid = self._parse_int(b, 'byid', limits.LONG_MIN, limits.LONG_MAX)
+        byid = self._parse_int(b, 'byid', constants.LONG_MIN, constants.LONG_MAX)
         if byid[0]:
             self.byid = byid[1]
         else:
@@ -1200,7 +1200,7 @@ class TasksEditH(DefaultHandler):
             self.error_m = byid[1]
             return
 
-        name = self._parse_int(b, 'name', limits.NAME_MIN_LEN, limits.NAME_MAX_LEN)
+        name = self._parse_int(b, 'name', constants.NAME_MIN_LEN, constants.NAME_MAX_LEN)
         if name[0]:
             self.name = name[1]
         else:
@@ -1208,7 +1208,7 @@ class TasksEditH(DefaultHandler):
             self.error_m = name[1]
             return
 
-        desc = self._parse_int(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        desc = self._parse_int(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
         if desc[0]:
             self.desc = desc[1]
         else:
@@ -1216,7 +1216,7 @@ class TasksEditH(DefaultHandler):
             self.error_m = desc[1]
             return
 
-        time = self._parse_int(b, 'time', limits.LONG_MIN, limits.LONG_MAX)
+        time = self._parse_int(b, 'time', constants.LONG_MIN, constants.LONG_MAX)
         if time[0]:
             self.time = time[1]
         else:
@@ -1232,7 +1232,7 @@ class TasksEditH(DefaultHandler):
             self.error_m = ready[1]
             return
 
-        parent_id = self._parse_int(b, 'parent_id', limits.LONG_MIN, limits.LONG_MAX)
+        parent_id = self._parse_int(b, 'parent_id', constants.LONG_MIN, constants.LONG_MAX)
         if parent_id[0]:
             self.parent_id = parent_id[1]
         else:
@@ -1273,7 +1273,7 @@ class TasksEditSH(DefaultHandler):
         self._post_pat()
 
     def _parse_body(self, b):
-        byid = self._parse_int(b, 'byid', limits.LONG_MIN, limits.LONG_MAX)
+        byid = self._parse_int(b, 'byid', constants.LONG_MIN, constants.LONG_MAX)
         if byid[0]:
             self.byid = byid[1]
         else:
@@ -1281,7 +1281,7 @@ class TasksEditSH(DefaultHandler):
             self.error_m = byid[1]
             return
 
-        s = self._parse_int(b, 's', limits.STATUS_MIN_LEN, limits.STATUS_MAX_LEN,
+        s = self._parse_int(b, 's', constants.STATUS_MIN_LEN, constants.STATUS_MAX_LEN,
                             lambda i: 'Invalid status : must be "new", "open", "closed" or "failed"'
                             if i != 'new' and i != 'open' and i != 'closed' and i != 'failed'
                             else None)
@@ -1292,7 +1292,7 @@ class TasksEditSH(DefaultHandler):
             self.error_m = s[1]
             return
 
-        desc = self._parse_int(b, 'desc', 1, limits.VARCHAR_MAX_LEN)
+        desc = self._parse_int(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
         if desc[0]:
             self.desc = desc[1]
         else:

@@ -33,6 +33,8 @@ class Connection():
         self.in_buffer = bytearray()
         self.current_pack_len = None
         self.last_heartbeat_ts = utils.timestamp()
+        self.last_reloading_ts = None
+        self.accepted = False
 
 
 def start_cluster(cluster_representation, node_procedures):
@@ -79,7 +81,6 @@ def start_cluster(cluster_representation, node_procedures):
         con = None
         if link.a == this:
             con = Connection(link.b.address, True, link.on_port)
-            con.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         elif link.b == this:
             con = Connection(link.a.address, False)
         if con is not None:
@@ -128,6 +129,8 @@ def _push_socket_to_connection(sock, from_address):
     if not con.outer:
         con.socket = sock
         con.last_heartbeat_ts = utils.timestamp()
+        con.socket.send('ok'.encode('utf-8'))
+        con.accepted = True
 
 
 def _agents_loop():
@@ -159,7 +162,14 @@ def _agents_loop():
             # Если у агента нет соединения
             if agent.outer:
                 # Бесконечно стучимся на другой конец провода
-                pass
+                if utils.timestamp() - agent.last_reloading_ts > constants.IPC_RECONNECT_RELOADING_MS:
+                    agent.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        agent.socket.connect((agent.host, agent.port))
+                        agent.socket.send(pass_phrase.decode('utf-8'))
+                    except socket.error:
+                        pass
+                    agent.last_reloading_ts = utils.timestamp()
 
 
 def _clear_agent_sock(agent):
@@ -168,6 +178,7 @@ def _clear_agent_sock(agent):
         agent.socket = None
     agent.in_buffer.clear()
     agent.current_pack_len = None
+    agent.accepted = False
 
 
 def _read_message(from_agent):

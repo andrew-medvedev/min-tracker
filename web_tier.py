@@ -945,6 +945,110 @@ class ProjectsEditH(DefaultHandler):
             self.error_m = s[1]
 
 
+class TasksAddH(DefaultHandler):
+    """
+    -> Создать задачу:
+    Условия:
+        Проверка аргументов + IDх;
+        Проверка, является ли назначенный исполнитель членом проекта
+
+    Запрос: @POST host/api/tasks/add {
+        "t_type": "dev",
+        "name": "Добавить фичу",
+        "desc": "Классная фича",
+        "s": "open",
+        "time": 22222,
+        "parent_id": 13,
+        "perf_id": 22
+    }
+
+    Положительный ответ: {
+        "ans": "ok",
+        "new_id": 44
+    }
+    Отрицательный ответ: {
+        "ans": "nok",
+        "m": "No permissions."
+    }
+    """
+    def __init__(self, application, request, **kwargs):
+        super().__init__(application, request, **kwargs)
+        self.t_type = None
+        self.name = None
+        self.desc = None
+        self.s = None
+        self.time = None
+        self.parent_id = None
+        self.perf_id = None
+
+    @asynchronous
+    def post(self):
+        self._post_pat()
+
+    def _parse_body(self, b):
+        t_type = self._parse_int(b, 't_type', constants.TYPE_MIN_LEN, constants.TYPE_MAX_LEN,
+                                 lambda i: 'Invalid task type : must be "bug" or "dev"'
+                                 if i != 'bug' and i != 'dev'
+                                 else None)
+        if t_type[0]:
+            self.t_type = t_type[1]
+        else:
+            self.is_valid = False
+            self.error_m = t_type[1]
+            return
+
+        name = self._parse_int(b, 'name', constants.NAME_MIN_LEN, constants.NAME_MAX_LEN)
+        if name[0]:
+            self.name = name[1]
+        else:
+            self.is_valid = False
+            self.error_m = name[1]
+            return
+
+        desc = self._parse_int(b, 'desc', 1, constants.VARCHAR_MAX_LEN)
+        if desc[0]:
+            self.desc = desc[1]
+        else:
+            self.is_valid = False
+            self.error_m = desc[1]
+            return
+
+        s = self._parse_int(b, 's', constants.STATUS_MIN_LEN, constants.STATUS_MAX_LEN,
+                            lambda i: 'Invalid status : must be "new", "open", "closed" or "failed"'
+                            if i != 'new' and i != 'open' and i != 'closed' and i != 'failed'
+                            else None)
+        if s[0]:
+            self.s = s[1]
+        else:
+            self.is_valid = False
+            self.error_m = s[1]
+            return
+
+        time = self._parse_int(b, 'time', constants.LONG_MIN, constants.LONG_MAX)
+        if time[0]:
+            self.time = time[1]
+        else:
+            self.is_valid = False
+            self.error_m = time[1]
+            return
+
+        parent_id = self._parse_int(b, 'parent_id', constants.LONG_MIN, constants.LONG_MAX)
+        if parent_id[0]:
+            self.parent_id = parent_id[1]
+        else:
+            self.is_valid = False
+            self.error_m = parent_id[1]
+            return
+
+        perf_id = self._parse_int(b, 'perf_id', constants.LONG_MIN, constants.LONG_MAX)
+        if perf_id[0]:
+            self.perf_id = perf_id[1]
+        else:
+            self.is_valid = False
+            self.error_m = perf_id[1]
+            return
+
+
 class TasksCH(tornado.web.RequestHandler):
     """
     -> Получить количество заданий проекта:

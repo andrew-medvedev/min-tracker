@@ -106,7 +106,9 @@ def add_user(login, password, salt, name):
                       (login, password, salt, name))
     except sqlite.Error as e:
         log.error('add_user : {}'.format(e))
+        con.rollback()
         return None
+    con.commit()
     return cursor.lastrowid
 
 
@@ -121,8 +123,10 @@ def add_users_kv_data(keys_ar, values_ar, links_ar):
                            (keys_ar[i], values_ar[i], links_ar[i]))
         except sqlite.Error as e:
             log.error('add_users_kv_data : {}'.format(e))
+            con.rollback()
             return None
         out.append(cursor.lastrowid)
+    con.commit()
     return out
 
 
@@ -133,7 +137,9 @@ def add_project(name, description, status, parent_id):
                       (name, description, status, parent_id))
     except sqlite.Error as e:
         log.error('add_project : {}'.format(e))
+        con.rollback()
         return None
+    con.commit()
     return cursor.lastrowid
 
 
@@ -148,8 +154,10 @@ def add_projects_kv_data(keys_ar, values_ar, links_ar):
                            (keys_ar[i], values_ar[i], links_ar[i]))
         except sqlite.Error as e:
             log.error('add_projects_kv_data : {}'.format(e))
+            con.rollback()
             return None
         out.append(cursor.lastrowid)
+    con.commit()
     return out
 
 
@@ -160,7 +168,9 @@ def add_user_role(user_id, project_id, role_name, role_type):
                       (user_id, project_id, role_name, role_type))
     except sqlite.Error as e:
         log.error('add_user_role : {}'.format(e))
+        con.rollback()
         return None
+    con.commit()
     return cursor.lastrowid
 
 
@@ -201,8 +211,38 @@ def add_task(task_type, name, description, task_status, author_role_id, performe
                        parent_id))
     except sqlite.Error as e:
         log.error('add_task : {}'.format(e))
+        con.rollback()
         return None
+    con.commit()
     return cursor.lastrowid
+
+
+def count_users_by_login(login):
+    cursor = con.cursor()
+    cursor.execute('SELECT count(*) FROM users WHERE login = ?', (login,))
+    count = cursor.fetchone()[0]
+
+    return count
+
+# TODO Протестировать поведение
+def add_user_with_data(login, password, salt, name, data):
+    cursor = con.cursor()
+    try:
+        cursor.execute('INSERT INTO users(login, password, salt, name) VALUES(?, ?, ?, ?)',
+                      (login, password, salt, name))
+        user_id = cursor.lastrowid
+        if cursor.lastrowid > 0:
+            for d in data:
+                cursor.execute('INSERT INTO users_kv_data(key, value, link) VALUES(?, ?, ?)', (d[0], d[1], user_id))
+        else:
+            con.rollback()
+            return False
+    except sqlite.Error as e:
+        log.error('add_user : {}'.format(e))
+        con.rollback()
+        return False
+    con.commit()
+    return True
 
 
 if __name__ == '__main__':

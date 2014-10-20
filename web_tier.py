@@ -17,6 +17,7 @@ def init_web_tier(host, port):
         (r'/api/regn', RegnH),
         (r'/api/login', LoginH),
         (r'/api/logout', LogoutH),
+        # TODO Добавить функцию get_user
         (r'/api/projects/c', ProjectsCH),
         (r'/api/projects', ProjectsH),
         (r'/api/projects/f', ProjectsFH),

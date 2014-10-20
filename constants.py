@@ -1,6 +1,6 @@
 __date__ = '09.10.2014'
 __author__ = {
-    'name': 'a.medvedev',
+    'name': 'a.medvedev'
 }
 
 LOGIN_MIN_LEN, LOGIN_MAX_LEN = 4, 30
@@ -11,6 +11,6 @@ ROLE_MIN_LEN, ROLE_MAX_LEN = 3, 4
 STATUS_MIN_LEN, STATUS_MAX_LEN = 3, 6
 TYPE_MIN_LEN, TYPE_MAX_LEN = 3, 3
 VARCHAR_MAX_LEN = 255
-TOKEN_LEN = 10
-
-# TODO Ввести потом реальную длину токена в TOKEN_LEN
+TOKEN_LEN = 40
+TOKEN_MAX_TIME_IDLE = 5 * 60 * 100  # 5 минут
+SALT_LENGTH = 10

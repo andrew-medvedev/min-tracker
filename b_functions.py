@@ -19,7 +19,10 @@ def register_new_user(login, password, name, data):
     else:
         salt = auth.generate_r_salt()
         pass_h = auth.hash_password(password, salt)
-
+        if database.add_user_with_data(login, pass_h, salt, name, data):
+            return True, None
+        else:
+            return False, 'Internal error'
 
 
 def login(login, password):
@@ -32,7 +35,10 @@ def login(login, password):
     # 7 - Возвращаем пользователю рожденный токен
     # TODO Надо получить доступ над циклом исполнения в Торнадо, что бы направить этот поток на служебные цели:
     # Проверка времени жизни токенов: если токены долго бездействуют - удаляем
-    pass
+    if database.count_users_by_login(login) == 0:
+        return False, 'Invalid login or password'
+    else:
+        auth.compare_password()
 
 
 def logout(user_token):

@@ -224,7 +224,7 @@ def count_users_by_login(login):
 
     return count
 
-# TODO Протестировать поведение
+
 def add_user_with_data(login, password, salt, name, data):
     cursor = con.cursor()
     try:
@@ -238,13 +238,21 @@ def add_user_with_data(login, password, salt, name, data):
             con.rollback()
             return False
     except sqlite.Error as e:
-        log.error('add_user : {}'.format(e))
+        log.error('add_user_with_data : {}'.format(e))
         con.rollback()
         return False
     con.commit()
     return True
 
 
+def find_user(by_id):
+    cursor = con.cursor()
+    cursor.execute('SELECT login, password, salt, name FROM users WHERE id = ?', (by_id,))
+    out = cursor.fetchone()
+    print('out = {}'.format(out))
+
+
 if __name__ == '__main__':
     open_con()
     create_schema()
+    add_user('lalala', b'ololo', b'elelele', 'a.medvedev')

@@ -22,11 +22,8 @@ def set_db_path(database_path):
 
 
 def create_schema():
-    try:
-        open(db_path)
-    except FileNotFoundError:
-        if con is not None:
-            add_users = """
+    if con is not None:
+        add_users = """
                     CREATE TABLE users(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         login VARCHAR(100) NOT NULL,
@@ -35,7 +32,7 @@ def create_schema():
                         name VARCHAR(50) NOT NULL
                     );
                     """
-            add_users_kv_data = """
+        add_users_kv_data = """
                     CREATE TABLE users_kv_data(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         key VARCHAR(50) NOT NULL,
@@ -44,7 +41,7 @@ def create_schema():
                         FOREIGN KEY(link) REFERENCES users(id)
                     );
                     """
-            add_projects = """
+        add_projects = """
                     CREATE TABLE projects(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         name VARCHAR(100) NOT NULL,
@@ -54,7 +51,7 @@ def create_schema():
                         FOREIGN KEY(parent_id) REFERENCES projects(id)
                     );
                     """
-            add_projects_kv_data = """
+        add_projects_kv_data = """
                     CREATE TABLE projects_kv_data(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         key VARCHAR(50) NOT NULL,
@@ -63,7 +60,7 @@ def create_schema():
                         FOREIGN KEY(link) REFERENCES projects(id)
                     );
                     """
-            add_user_roles = """
+        add_user_roles = """
                     CREATE TABLE user_roles(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         user_id INTEGER NOT NULL,
@@ -74,7 +71,7 @@ def create_schema():
                         FOREIGN KEY(project_id) REFERENCES projects(id)
                     );
                     """
-            add_tasks = """
+        add_tasks = """
                     CREATE TABLE tasks(
                         id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         task_type VARCHAR(6) NOT NULL,
@@ -96,7 +93,15 @@ def create_schema():
                         FOREIGN KEY(parent_id) REFERENCES tasks(id)
                     );
                     """
-            con.execute(add_users + add_users_kv_data + add_projects + add_projects_kv_data + add_user_roles + add_tasks)
+        try:
+            con.execute(add_users)
+            con.execute(add_users_kv_data)
+            con.execute(add_projects)
+            con.execute(add_projects_kv_data)
+            con.execute(add_user_roles)
+            con.execute(add_tasks)
+        except sqlite.Error as e:
+            log.error(e)
 
 
 def add_user(login, password, salt, name):
@@ -245,14 +250,5 @@ def add_user_with_data(login, password, salt, name, data):
     return True
 
 
-def find_user(by_id):
-    cursor = con.cursor()
-    cursor.execute('SELECT login, password, salt, name FROM users WHERE id = ?', (by_id,))
-    out = cursor.fetchone()
-    print('out = {}'.format(out))
-
-
 if __name__ == '__main__':
-    open_con()
-    create_schema()
-    add_user('lalala', b'ololo', b'elelele', 'a.medvedev')
+    pass

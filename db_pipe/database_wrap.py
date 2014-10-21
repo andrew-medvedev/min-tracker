@@ -12,6 +12,35 @@ def init(db_path):
     database.create_schema()
 
 
+def find_user_by_login(login):
+    cursor = database.con.cursor()
+    cursor.execute('SELECT id, password, salt, name FROM users WHERE login = ?', (login,))
+    user = cursor.fetchone()
+    out = User(user[0])
+    out.login = login
+    out.password = user[1]
+    out.salt = user[2]
+    out.name = user[3]
+
+    return out
+
+
+def find_user_by_name(name):
+    cursor = database.con.cursor()
+    cursor.execute('SELECT id, login, password, salt FROM users WHERE name = ?', (name,))
+    user = cursor.fetchone()
+    out = User(user[0])
+    out.login = user[1]
+    out.password = user[2]
+    out.salt = user[3]
+    out.name = name
+
+    data_cur = database.con.execute('SELECT id, key, value, link FROM users_kv_data WHERE link = ?', (out.id,))
+    #
+
+    return out
+
+
 class User:
     def __init__(self, _id):
         self._id = _id

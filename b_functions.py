@@ -2,6 +2,7 @@ __author__ = 'a.medvedev'
 
 import database
 import auth
+import utils
 
 
 def register_new_user(login, password, name, data):
@@ -35,17 +36,28 @@ def login(login, password):
     # 7 - Возвращаем пользователю рожденный токен
     # TODO Надо получить доступ над циклом исполнения в Торнадо, что бы направить этот поток на служебные цели:
     # Проверка времени жизни токенов: если токены долго бездействуют - удаляем
-    if database.count_users_by_login(login) == 0:
-        return False, 'Invalid login or password'
+
+    user = database.find_user_by_login(login)
+    if user is None:
+        return False, 'Invalid login and/or password'
     else:
-        auth.compare_password()
+        if auth.compare_password(password, user.password, user.salt):
+            new_token = auth.generate_token()
+            auth.insert_new_token(login, new_token)
+            return True, new_token
+        else:
+            return False, 'Invalid login and/or password'
 
 
 def logout(user_token):
     # 1 - Проверяем, есть ли в дереве(словаре) такой токен
     # 2 - Если есть - удаляем и возвращаем (True, None)
     # 3 - Если нет - возвращаем (False, 'Didn't find such token')
-    pass
+
+    if auth.return_token(user_token):
+        return True, None
+    else:
+        return False, 'Didn\'t find such token'
 
 
 def get_user_info(user_token, name):
@@ -57,7 +69,12 @@ def get_user_info(user_token, name):
     # 6 - Если есть - делаем выборку соответствующих users_kv_data
     # 7 - Если запрос прошел без ошибок - возвращаем все данные
     # 8 - Если нет - возвращаем (False, Internal Error)
-    pass
+
+    if user_token in auth.tokens_t:
+        token_wrapper = auth.tokens_t[user_token]
+        token_wrapper.last_act_ts = utils.timestamp()
+    else:
+        return False, 'No permissions'
 
 
 def count_projects(user_token):
